@@ -228,6 +228,32 @@
         }
 
         /* =========================
+           ERROR SCREEN
+        ========================= */
+
+        .error-msg {
+            position: absolute;
+
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+
+            background: #2a1414;
+            border: 1px solid #55201f;
+            color: #ff8a8a;
+
+            padding: 8px 14px;
+
+            border-radius: 7px;
+
+            font-size: 12px;
+
+            display: none;
+
+            z-index: 5;
+        }
+
+        /* =========================
            FOOTER
         ========================= */
 
@@ -353,6 +379,13 @@
 
         </div>
 
+        <div
+            id="errorMsg"
+            class="error-msg"
+        >
+            Não foi possível carregar a live.
+        </div>
+
     </div>
 
 </main>
@@ -389,6 +422,76 @@
     const empty =
         document.getElementById("empty");
 
+    const errorMsg =
+        document.getElementById("errorMsg");
+
+
+    /*
+     * =========================
+     * DETECÇÃO DE AMBIENTE
+     * =========================
+     *
+     * Quando o app roda DENTRO do Discord (como Activity),
+     * ele é servido através do proxy do Discord, cujo
+     * hostname termina em "discordsays.com".
+     *
+     * Nesse ambiente, requisições diretas pra domínios
+     * externos (como player.kick.com) são bloqueadas pela
+     * CSP do Discord (erro "blocked:csp"). É preciso usar
+     * um caminho mapeado via "URL Mappings" no Developer
+     * Portal, que o proxy do Discord redireciona por baixo
+     * dos panos pro domínio real.
+     *
+     * Fora do Discord (navegador normal, ex: GitHub Pages),
+     * não existe esse proxy — então usamos a URL direta da
+     * Kick.
+     *
+     * IMPORTANTE: troque "SEU_PREFIXO_AQUI" pelo prefixo que
+     * você configurar em Developer Portal > Activities >
+     * URL Mappings apontando para "player.kick.com".
+     * Exemplo de mapeamento:
+     *   Prefixo:  /kick-player
+     *   Destino:  player.kick.com
+     */
+
+    const KICK_PLAYER_PROXY_PREFIX = "/kick-player";
+
+    const isRunningInsideDiscord =
+        window.location.hostname.endsWith("discordsays.com");
+
+
+    function buildPlayerUrl(username) {
+
+        if (isRunningInsideDiscord) {
+
+            /*
+             * Caminho relativo: o proxy do Discord
+             * intercepta e redireciona pro domínio
+             * mapeado (player.kick.com).
+             */
+
+            return (
+                KICK_PLAYER_PROXY_PREFIX +
+                "/" +
+                encodeURIComponent(username) +
+                "?autoplay=true"
+            );
+
+        }
+
+        /*
+         * Fora do Discord: usa a URL real da Kick
+         * diretamente, como no navegador comum.
+         */
+
+        return (
+            "https://player.kick.com/" +
+            encodeURIComponent(username) +
+            "?autoplay=true"
+        );
+
+    }
+
 
     function loadKick(username) {
 
@@ -413,6 +516,8 @@
             return;
         }
 
+        errorMsg.style.display = "none";
+
 
         /*
          * Cria o player oficial da KICK.
@@ -421,10 +526,7 @@
         const iframe =
             document.createElement("iframe");
 
-        iframe.src =
-            "https://player.kick.com/" +
-            encodeURIComponent(username) +
-            "?autoplay=true";
+        iframe.src = buildPlayerUrl(username);
 
         iframe.allow =
             "autoplay; fullscreen";
@@ -440,6 +542,29 @@
             "scrolling",
             "no"
         );
+
+        /*
+         * Se o iframe não conseguir carregar
+         * (ex: mapeamento ausente/errado dentro
+         * do Discord), mostra um aviso em vez de
+         * ficar com a tela em branco sem feedback.
+         */
+
+        let loaded = false;
+
+        iframe.addEventListener("load", () => {
+            loaded = true;
+        });
+
+        setTimeout(() => {
+
+            if (!loaded) {
+
+                errorMsg.style.display = "block";
+
+            }
+
+        }, 6000);
 
 
         /*
